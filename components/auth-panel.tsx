@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { Input } from "@/components/ui/input";
+import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Role = "buyer" | "farmer";
 type Mode = "login" | "register";
@@ -18,10 +19,51 @@ export function AuthPanel({ initialRole }: AuthPanelProps) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
   const [role, setRole] = useState<Role>(initialRole);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    router.push(role === "farmer" ? "/farmer/dashboard" : "/marketplace");
+    setLoading(true);
+
+    try {
+      if (mode === "register") {
+        const { data, error } = await supabaseBrowser.auth.signUp({ email, password });
+
+        if (error) {
+          console.error("Sign up error", error);
+          setLoading(false);
+          return;
+        }
+
+        const user = data.user;
+
+        if (user?.id) {
+          // create profile server-side using admin key
+          await fetch("/api/profiles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: user.id, full_name: name, role }),
+          });
+        }
+
+        router.push(role === "farmer" ? "/farmer/dashboard" : "/marketplace");
+      } else {
+        const { error } = await supabaseBrowser.auth.signInWithPassword({ email, password });
+
+        if (error) {
+          console.error("Sign in error", error);
+          setLoading(false);
+          return;
+        }
+
+        router.push(role === "farmer" ? "/farmer/dashboard" : "/marketplace");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -86,12 +128,32 @@ export function AuthPanel({ initialRole }: AuthPanelProps) {
           </div>
 
           <div className="grid gap-4">
-            <Input label="Name" placeholder="Your name" />
-            <Input label="Email" type="email" placeholder="hello@market.com" />
-            <Input label="Password" type="password" placeholder="••••••••" />
+            <Input
+              name="full_name"
+              label="Name"
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+            />
+            <Input
+              name="email"
+              label="Email"
+              type="email"
+              placeholder="hello@market.com"
+              value={email}
+              onChange={(e) => setEmail(e.currentTarget.value)}
+            />
+            <Input
+              name="password"
+              label="Password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.currentTarget.value)}
+            />
           </div>
 
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="w-full" disabled={loading}>
             {mode === "login" ? "Login" : "Create account"}
           </Button>
 

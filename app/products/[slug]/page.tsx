@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Navbar } from "@/components/navbar";
 import { buttonStyles } from "@/components/ui/button-styles";
-import { products } from "@/lib/data";
+import { products as staticProducts } from "@/lib/data";
+import { getProductBySlugFromSupabase } from "@/lib/supabase/products";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }> | { slug: string };
@@ -11,7 +12,11 @@ type ProductPageProps = {
 export default async function ProductDetailsPage({ params }: ProductPageProps) {
   const resolvedParams = await Promise.resolve(params);
   const { slug } = resolvedParams;
-  const product = products.find((item) => item.slug === slug);
+  let product = await getProductBySlugFromSupabase(slug);
+
+  if (!product) {
+    product = staticProducts.find((item) => item.slug === slug) ?? null;
+  }
 
   if (!product) {
     notFound();

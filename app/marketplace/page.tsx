@@ -1,8 +1,10 @@
 import { Navbar } from "@/components/navbar";
 import { MarketplaceBrowser } from "@/components/marketplace-browser";
-import { products } from "@/lib/data";
+import { getProductsFromSupabase } from "@/lib/supabase/products";
 
-export default function MarketplacePage() {
+export default async function MarketplacePage() {
+  const products = await getProductsFromSupabase();
+
   return (
     <>
       <Navbar />
