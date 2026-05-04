@@ -19,32 +19,36 @@ function rowToProduct(row: unknown): Product {
 }
 
 export async function getProductsFromSupabase(): Promise<Product[]> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("products")
-    .select("slug,name,category,price,farmer,location,description,badge,rating,art")
-    .order("created_at", { ascending: false });
+  try {
+    const supabase = createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("slug,name,category,price,farmer,location,description,badge,rating,art")
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    throw error;
+    if (error) {
+      return [];
+    }
+
+    return (data ?? []).map(rowToProduct) as Product[];
+  } catch {
+    return [];
   }
-
-  return (data ?? []).map(rowToProduct) as Product[];
 }
 
 export async function getProductBySlugFromSupabase(slug: string): Promise<Product | null> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("products")
-    .select("slug,name,category,price,farmer,location,description,badge,rating,art")
-    .eq("slug", slug)
-    .maybeSingle();
+  try {
+    const supabase = createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("slug,name,category,price,farmer,location,description,badge,rating,art")
+      .eq("slug", slug)
+      .maybeSingle();
 
-  if (error) {
-    throw error;
+    if (error || !data) return null;
+
+    return rowToProduct(data as unknown);
+  } catch {
+    return null;
   }
-
-  if (!data) return null;
-
-  return rowToProduct(data as unknown);
 }
