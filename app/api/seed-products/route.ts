@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { products as staticProducts } from "@/lib/data";
 
+// Fixed: onConflict must be string, not array
+
 export async function POST() {
   try {
     const supabase = createSupabaseAdminClient();
