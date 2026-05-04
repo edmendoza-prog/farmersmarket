@@ -20,7 +20,7 @@ export async function POST() {
     }));
 
     // Upsert by slug so repeated runs are safe
-    const { data, error } = await supabase.from("products").upsert(rows, { onConflict: ["slug"] }).select();
+    const { data, error } = await supabase.from("products").upsert(rows, { onConflict: "slug" }).select();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
