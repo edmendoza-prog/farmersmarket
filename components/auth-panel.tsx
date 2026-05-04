@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { buttonStyles } from "@/components/ui/button-styles";
@@ -23,30 +23,89 @@ export function AuthPanel({ initialRole }: AuthPanelProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
+  const [signupCooldownSeconds, setSignupCooldownSeconds] = useState(0);
+
+  useEffect(() => {
+    if (signupCooldownSeconds <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setSignupCooldownSeconds((current) => (current > 0 ? current - 1 : 0));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [signupCooldownSeconds]);
+
+  function handleAuthError(error: { message?: string; status?: number }, currentMode: Mode) {
+    const message = String(error.message ?? "").toLowerCase();
+    const isRateLimited = error.status === 429 || message.includes("rate limit");
+
+    if (isRateLimited) {
+      setSignupCooldownSeconds(60);
+      setAuthError("Too many attempts right now. Please wait about a minute before trying again.");
+      return;
+    }
+
+    if (message.includes("invalid login credentials")) {
+      setAuthError("Invalid email or password. Check your credentials and try again.");
+      return;
+    }
+
+    if (message.includes("email not confirmed")) {
+      setAuthError("Please confirm your email first, then log in.");
+      return;
+    }
+
+    setAuthError(
+      currentMode === "register"
+        ? "Unable to create account right now. Please try again."
+        : "Unable to sign in right now. Please try again."
+    );
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setAuthError("");
+    setAuthNotice("");
+
+    if (mode === "register" && signupCooldownSeconds > 0) {
+      setAuthError(`Please wait ${signupCooldownSeconds}s before creating another account.`);
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (mode === "register") {
-        const { data, error } = await supabaseBrowser.auth.signUp({ email, password });
+        const response = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            full_name: name,
+            role,
+          }),
+        });
 
-        if (error) {
-          console.error("Sign up error", error);
-          setLoading(false);
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as { error?: string };
+          const message = payload.error ?? "Unable to create account right now.";
+
+          console.error("Sign up error", message);
+          handleAuthError({ message, status: response.status }, mode);
           return;
         }
 
-        const user = data.user;
+        const { error: signInError } = await supabaseBrowser.auth.signInWithPassword({ email, password });
 
-        if (user?.id) {
-          // create profile server-side using admin key
-          await fetch("/api/profiles", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: user.id, full_name: name, role }),
-          });
+        if (signInError) {
+          console.error("Sign in error", signInError);
+          handleAuthError(signInError, "login");
+          setAuthNotice("Account created. Please log in.");
+          setMode("login");
+          return;
         }
 
         router.push(role === "farmer" ? "/farmer/dashboard" : "/marketplace");
@@ -55,7 +114,7 @@ export function AuthPanel({ initialRole }: AuthPanelProps) {
 
         if (error) {
           console.error("Sign in error", error);
-          setLoading(false);
+          handleAuthError(error, mode);
           return;
         }
 
@@ -153,8 +212,22 @@ export function AuthPanel({ initialRole }: AuthPanelProps) {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {mode === "login" ? "Login" : "Create account"}
+          {authError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{authError}</div>
+          ) : null}
+
+          {authNotice ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{authNotice}</div>
+          ) : null}
+
+          <Button type="submit" className="w-full" disabled={loading || (mode === "register" && signupCooldownSeconds > 0)}>
+            {loading
+              ? "Please wait..."
+              : mode === "register" && signupCooldownSeconds > 0
+                ? `Try again in ${signupCooldownSeconds}s`
+                : mode === "login"
+                  ? "Login"
+                  : "Create account"}
           </Button>
 
           <button
